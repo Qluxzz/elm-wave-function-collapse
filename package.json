@@ -1,0 +1,16 @@
+{
+  "name": "elm-waveform-collapse",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "elm-format": "^0.8.7",
+    "elm-live": "^4.0.2",
+    "elm-test": "^0.19.1-revision12"
+  }
+}

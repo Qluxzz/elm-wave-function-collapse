@@ -1,0 +1,32 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+div {
+    display: grid;
+    grid-template-columns: repeat(9, 70px);
+    grid-template-rows: repeat(9, 70px);
+    gap: 10px;
+}
+
+div>div {
+    border: 2px solid black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+}
+
+.focused {
+    outline: 2px solid greenyellow;
+}
