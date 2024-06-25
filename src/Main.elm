@@ -81,9 +81,9 @@ validate g =
 grid : List ( ( Int, Int ), Maybe Int )
 grid =
     List.foldl
-        (\x ->
+        (\y ->
             \acc ->
-                acc ++ (List.range 0 8 |> List.map (\y -> Tuple.pair (Tuple.pair x y) Nothing))
+                acc ++ (List.range 0 8 |> List.map (\x -> Tuple.pair (Tuple.pair x y) Nothing))
         )
         []
         (List.range 0 8)
@@ -91,7 +91,12 @@ grid =
 
 type Msg
     = FocusCell ( Int, Int )
+    | FocusNextCell
+    | FocusPreviousCell
+    | FocusCellAbove
+    | FocusCellBelow
     | EnterNumber Int
+    | ClearFocusedCell
     | NoOp
 
 
@@ -101,13 +106,61 @@ update msg model =
         FocusCell c ->
             ( { model | focusedCell = Just c }, Cmd.none )
 
+        FocusNextCell ->
+            let
+                next =
+                    model.focusedCell
+                        |> Maybe.map (\( y, x ) -> ( y, modBy 9 (x + 1) ))
+                        |> Maybe.withDefault ( 0, 0 )
+                        |> Just
+            in
+            ( { model | focusedCell = next }, Cmd.none )
+
+        FocusPreviousCell ->
+            let
+                previous =
+                    model.focusedCell
+                        |> Maybe.map (\( y, x ) -> ( y, modBy 9 (x - 1) ))
+                        |> Maybe.withDefault ( 8, 0 )
+                        |> Just
+            in
+            ( { model | focusedCell = previous }, Cmd.none )
+
+        FocusCellAbove ->
+            let
+                above =
+                    model.focusedCell
+                        |> Maybe.map (\( y, x ) -> ( modBy 9 (y - 1), x ))
+                        |> Maybe.withDefault ( 0, 0 )
+                        |> Just
+            in
+            ( { model | focusedCell = above }, Cmd.none )
+
+        FocusCellBelow ->
+            let
+                below =
+                    model.focusedCell
+                        |> Maybe.map (\( y, x ) -> ( modBy 9 (y + 1), x ))
+                        |> Maybe.withDefault ( 0, 0 )
+                        |> Just
+            in
+            ( { model | focusedCell = below }, Cmd.none )
+
+        ClearFocusedCell ->
+            case model.focusedCell of
+                Just c ->
+                    ( { model | grid = Dict.insert c Nothing model.grid }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
         EnterNumber n ->
             case model.focusedCell of
                 Nothing ->
                     ( model, Cmd.none )
 
                 Just c ->
-                    ( { model | grid = Dict.update c (\_ -> Just (Just n)) model.grid }, Cmd.none )
+                    ( { model | grid = Dict.insert c (Just n) model.grid }, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
@@ -117,13 +170,18 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "Document Title"
     , body =
-        [ Html.div []
-            (Dict.toList model.grid
-                |> List.map
-                    (\( ( x, y ), v ) ->
-                        Html.div [ id (String.fromInt x ++ "," ++ String.fromInt y), Html.Attributes.classList [ ( "focused", model.focusedCell == Just ( x, y ) ) ], Html.Events.onClick (FocusCell ( x, y )) ] [ Html.text (v |> Maybe.map fromInt |> Maybe.withDefault "") ]
-                    )
-            )
+        [ Html.div [ Html.Attributes.class "container" ]
+            [ Html.div [ Html.Attributes.class "grid" ]
+                (Dict.toList model.grid
+                    |> List.map
+                        (\( ( x, y ), v ) ->
+                            Html.div [ id (String.fromInt y ++ "," ++ String.fromInt x), Html.Attributes.classList [ ( "focused", model.focusedCell == Just ( x, y ) ) ], Html.Events.onClick (FocusCell ( x, y )) ] [ Html.text (v |> Maybe.map fromInt |> Maybe.withDefault "") ]
+                        )
+                )
+            , Html.div
+                [ Html.Attributes.class "sub-grid" ]
+                (List.range 0 8 |> List.map (\_ -> Html.div [] []))
+            ]
         ]
     }
 
@@ -165,4 +223,21 @@ toKey keyValue =
                 NoOp
 
         _ ->
-            NoOp
+            case keyValue of
+                "Backspace" ->
+                    ClearFocusedCell
+
+                "ArrowLeft" ->
+                    FocusPreviousCell
+
+                "ArrowRight" ->
+                    FocusNextCell
+
+                "ArrowUp" ->
+                    FocusCellAbove
+
+                "ArrowDown" ->
+                    FocusCellBelow
+
+                _ ->
+                    NoOp

@@ -1,3 +1,7 @@
+:root {
+    --cell-size: 71px;
+}
+
 html,
 body {
     height: 100%;
@@ -7,20 +11,37 @@ body {
 
 body {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
 }
 
-div {
+.sub-grid {
     display: grid;
-    grid-template-columns: repeat(9, 70px);
-    grid-template-rows: repeat(9, 70px);
-    gap: 10px;
+    grid-template-columns: repeat(3, calc(var(--cell-size)*3));
+    grid-template-rows: repeat(3, calc(var(--cell-size)*3));
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    outline: 2px solid #000;
 }
 
-div>div {
-    border: 2px solid black;
+.sub-grid>div {
+    outline: 1px solid #000;
+}
+
+.container {
+    position: relative;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(9, var(--cell-size));
+    grid-template-rows: repeat(9, var(--cell-size));
+}
+
+.grid>div {
+    outline: 1px solid #eee;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -28,5 +49,6 @@ div>div {
 }
 
 .focused {
-    outline: 2px solid greenyellow;
+    outline: 2px solid green !important;
+    z-index: 999;
 }
