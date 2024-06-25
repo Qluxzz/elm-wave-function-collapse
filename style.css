@@ -15,6 +15,29 @@ body {
     justify-content: center;
 }
 
+.container {
+    position: relative;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(9, var(--cell-size));
+    grid-template-rows: repeat(9, var(--cell-size));
+
+    & div {
+        outline: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+
+        &.focused {
+            outline: 2px solid green !important;
+            z-index: 999;
+        }
+    }
+}
+
 .sub-grid {
     display: grid;
     grid-template-columns: repeat(3, calc(var(--cell-size)*3));
@@ -24,31 +47,8 @@ body {
     left: 0;
     pointer-events: none;
     outline: 2px solid #000;
-}
 
-.sub-grid>div {
-    outline: 1px solid #000;
-}
-
-.container {
-    position: relative;
-}
-
-.grid {
-    display: grid;
-    grid-template-columns: repeat(9, var(--cell-size));
-    grid-template-rows: repeat(9, var(--cell-size));
-}
-
-.grid>div {
-    outline: 1px solid #eee;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 40px;
-}
-
-.focused {
-    outline: 2px solid green !important;
-    z-index: 999;
+    & div {
+        outline: 1px solid #000;
+    }
 }
