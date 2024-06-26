@@ -7,6 +7,7 @@ import Html
 import Html.Attributes exposing (id)
 import Html.Events
 import Json.Decode as Decode
+import Set
 import String exposing (fromInt)
 
 
@@ -52,30 +53,68 @@ type CellState
 
 
 subGrid : ( Int, Int ) -> ( Int, Int )
-subGrid ( x, y ) =
-    ( floor (toFloat x / 3), floor (toFloat y / 3) )
+subGrid ( y, x ) =
+    ( floor (toFloat y / 3), floor (toFloat x / 3) )
+
+
+horizontal : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+horizontal g ( y, x ) =
+    List.range 0 8
+        |> List.filter (\x_ -> x_ /= x)
+        |> List.filterMap (\x_ -> Dict.get ( y, x_ ) g)
+        |> List.filterMap identity
+
+
+vertical : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+vertical g ( y, x ) =
+    List.range 0 8
+        |> List.filter (\y_ -> y_ /= y)
+        |> List.filterMap (\y_ -> Dict.get ( y_, x ) g)
+        |> List.filterMap identity
+
+
+valuesInSubGrid : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+valuesInSubGrid g pos =
+    let
+        ( y, x ) =
+            subGrid pos
+
+        offsets =
+            [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 0, 2 ), ( 1, 2 ), ( 2, 2 ) ]
+    in
+    offsets
+        |> List.map (Tuple.mapBoth ((*) y) ((*) x))
+        |> List.filter (\p -> p /= pos)
+        |> List.map (\p -> Dict.get p g)
+        |> List.filterMap identity
+        |> List.filterMap identity
 
 
 validate : Dict ( Int, Int ) (Maybe Int) -> Dict ( Int, Int ) CellState
 validate g =
-    let
-        filledCells : List ( Int, Int )
-        filledCells =
-            Dict.foldr
-                (\pos ->
-                    \v ->
-                        \acc ->
-                            case v of
-                                Just _ ->
-                                    pos :: acc
+    g
+        |> Dict.map
+            (\( y, x ) ->
+                \v_ ->
+                    case v_ of
+                        Nothing ->
+                            Undefined
 
-                                Nothing ->
-                                    acc
-                )
-                []
-                g
-    in
-    Dict.empty
+                        Just v__ ->
+                            -- Validate axis and subgrid
+                            let
+                                used =
+                                    [ horizontal, vertical, valuesInSubGrid ]
+                                        |> List.map (\x_ -> x_ g ( y, x ))
+                                        |> List.concat
+                                        |> Set.fromList
+                            in
+                            if Set.member v__ used then
+                                Error
+
+                            else
+                                Okay
+            )
 
 
 grid : List ( ( Int, Int ), Maybe Int )
@@ -168,6 +207,13 @@ update msg model =
 
 view : Model -> Browser.Document Msg
 view model =
+    let
+        validation =
+            validate model.grid
+
+        _ =
+            Debug.log "validation" validation
+    in
     { title = "Document Title"
     , body =
         [ Html.div [ Html.Attributes.class "container" ]
@@ -175,7 +221,16 @@ view model =
                 (Dict.toList model.grid
                     |> List.map
                         (\( ( x, y ), v ) ->
-                            Html.div [ id (String.fromInt y ++ "," ++ String.fromInt x), Html.Attributes.classList [ ( "focused", model.focusedCell == Just ( x, y ) ) ], Html.Events.onClick (FocusCell ( x, y )) ] [ Html.text (v |> Maybe.map fromInt |> Maybe.withDefault "") ]
+                            Html.div
+                                [ id (String.fromInt y ++ "," ++ String.fromInt x)
+                                , Html.Attributes.classList
+                                    [ ( "focused", model.focusedCell == Just ( x, y ) )
+                                    , ( "error", Dict.get ( x, y ) validation == Just Error )
+                                    , ( "okay", Dict.get ( x, y ) validation == Just Okay )
+                                    ]
+                                , Html.Events.onClick (FocusCell ( x, y ))
+                                ]
+                                [ Html.text (v |> Maybe.map fromInt |> Maybe.withDefault "") ]
                         )
                 )
             , Html.div

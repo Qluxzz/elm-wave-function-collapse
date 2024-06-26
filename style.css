@@ -54,3 +54,11 @@ body {
         outline: 1px solid #000;
     }
 }
+
+.error {
+    background-color: red;
+}
+
+.okay {
+    background-color: green;
+}
