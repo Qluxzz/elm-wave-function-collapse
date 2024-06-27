@@ -31,11 +31,14 @@ body {
     >div {
         outline: 1px solid #eee;
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
         align-items: center;
         justify-content: center;
         font-size: 40px;
         text-align: center;
+
+        &:has(.possible) {
+            grid-template-columns: repeat(3, 1fr);
+        }
 
         &.focused {
             outline: 2px solid green !important;
@@ -57,14 +60,6 @@ body {
     >div {
         outline: 1px solid #000;
     }
-}
-
-.error {
-    background-color: red;
-}
-
-.okay {
-    background-color: green;
 }
 
 .possible {

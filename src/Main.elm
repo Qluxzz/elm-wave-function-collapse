@@ -1,4 +1,4 @@
-module Main exposing (..)
+module Main exposing (generateGrid, getPossibleValuesForCells, main)
 
 import Browser
 import Browser.Events
@@ -10,6 +10,7 @@ import Json.Decode as Decode
 import Platform.Cmd as Cmd
 import Random
 import Random.Extra
+import Random.Set
 import Set
 import String exposing (fromInt)
 import Time
@@ -36,7 +37,7 @@ main =
                 Sub.batch
                     (Browser.Events.onKeyUp keyDecoder
                         :: (if not model.solved then
-                                [ Time.every 10 (\_ -> SolveSingleStep) ]
+                                [ Time.every 100 (\_ -> SolveSingleStep) ]
 
                             else
                                 []
@@ -47,120 +48,25 @@ main =
 
 type alias Model =
     { grid : Dict ( Int, Int ) (Maybe Int)
+    , validation : Dict ( Int, Int ) (Set.Set Int)
     , focusedCell : Maybe ( Int, Int )
-    , solverSpeedMs : Int
     , solved : Bool
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init () =
-    ( { grid = Dict.fromList generateGrid, focusedCell = Nothing, solverSpeedMs = 1000, solved = True }, Cmd.none )
-
-
-type CellState
-    = Okay
-    | Error
-    | Undefined
-
-
-subGrid : ( Int, Int ) -> ( Int, Int )
-subGrid ( y, x ) =
-    ( floor (toFloat y / 3), floor (toFloat x / 3) )
-
-
-horizontal : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
-horizontal g ( y, x ) =
-    List.range 0 8
-        |> List.filter (\x_ -> x_ /= x)
-        |> List.filterMap (\x_ -> Dict.get ( y, x_ ) g)
-        |> List.filterMap identity
-
-
-vertical : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
-vertical g ( y, x ) =
-    List.range 0 8
-        |> List.filter (\y_ -> y_ /= y)
-        |> List.filterMap (\y_ -> Dict.get ( y_, x ) g)
-        |> List.filterMap identity
-
-
-valuesInSubGrid : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
-valuesInSubGrid g pos =
     let
-        ( y, x ) =
-            subGrid pos
-
-        offsets =
-            [ ( 0, 0 )
-            , ( 0, 1 )
-            , ( 0, 2 )
-            , ( 1, 0 )
-            , ( 1, 1 )
-            , ( 1, 2 )
-            , ( 2, 0 )
-            , ( 2, 1 )
-            , ( 2, 2 )
-            ]
+        g =
+            Dict.fromList generateGrid
     in
-    offsets
-        |> List.map (Tuple.mapBoth ((+) (y * 3)) ((+) (x * 3)))
-        |> List.filter (\p -> p /= pos)
-        |> List.map (\p -> Dict.get p g)
-        |> List.filterMap identity
-        |> List.filterMap identity
-
-
-type alias ValidationResult =
-    { state : CellState
-    , possibleValues : Set.Set Int
-    }
-
-
-validNumbersForCell : Set.Set number
-validNumbersForCell =
-    Set.fromList [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
-
-
-validate : Dict ( Int, Int ) (Maybe Int) -> Dict ( Int, Int ) ValidationResult
-validate g =
-    g
-        |> Dict.map
-            (\pos ->
-                \v_ ->
-                    let
-                        used =
-                            [ horizontal, vertical, valuesInSubGrid ]
-                                |> List.map (\x_ -> x_ g pos)
-                                |> List.concat
-                                |> Set.fromList
-
-                        p =
-                            Set.diff validNumbersForCell used
-                    in
-                    case v_ of
-                        Nothing ->
-                            { state = Undefined, possibleValues = p }
-
-                        Just v__ ->
-                            -- Validate axis and subgrid
-                            if Set.member v__ used then
-                                { state = Error, possibleValues = p }
-
-                            else
-                                { state = Okay, possibleValues = p }
-            )
-
-
-generateGrid : List ( ( Int, Int ), Maybe Int )
-generateGrid =
-    List.foldl
-        (\y ->
-            \acc ->
-                acc ++ (List.range 0 8 |> List.map (\x -> Tuple.pair (Tuple.pair x y) Nothing))
-        )
-        []
-        (List.range 0 8)
+    ( { grid = g
+      , validation = getPossibleValuesForCells g
+      , focusedCell = Nothing
+      , solved = True
+      }
+    , Cmd.none
+    )
 
 
 type Msg
@@ -190,7 +96,7 @@ update msg model =
                 next =
                     model.focusedCell
                         |> Maybe.map (\( y, x ) -> ( y, modBy 9 (x + 1) ))
-                        |> Maybe.withDefault ( 0, 0 )
+                        |> Maybe.withDefault center
                         |> Just
             in
             ( { model | focusedCell = next }, Cmd.none )
@@ -200,7 +106,7 @@ update msg model =
                 previous =
                     model.focusedCell
                         |> Maybe.map (\( y, x ) -> ( y, modBy 9 (x - 1) ))
-                        |> Maybe.withDefault ( 8, 0 )
+                        |> Maybe.withDefault center
                         |> Just
             in
             ( { model | focusedCell = previous }, Cmd.none )
@@ -210,7 +116,7 @@ update msg model =
                 above =
                     model.focusedCell
                         |> Maybe.map (\( y, x ) -> ( modBy 9 (y - 1), x ))
-                        |> Maybe.withDefault ( 0, 0 )
+                        |> Maybe.withDefault center
                         |> Just
             in
             ( { model | focusedCell = above }, Cmd.none )
@@ -220,7 +126,7 @@ update msg model =
                 below =
                     model.focusedCell
                         |> Maybe.map (\( y, x ) -> ( modBy 9 (y + 1), x ))
-                        |> Maybe.withDefault ( 0, 0 )
+                        |> Maybe.withDefault center
                         |> Just
             in
             ( { model | focusedCell = below }, Cmd.none )
@@ -228,22 +134,36 @@ update msg model =
         ClearFocusedCell ->
             case model.focusedCell of
                 Just c ->
-                    ( { model | grid = Dict.insert c Nothing model.grid }, Cmd.none )
+                    let
+                        updatedGrid =
+                            Dict.insert c Nothing model.grid
+
+                        updatedValidation =
+                            getPossibleValuesForCells updatedGrid
+                    in
+                    ( { model | grid = updatedGrid, validation = updatedValidation }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
 
         EnterNumber n ->
             case model.focusedCell of
-                Nothing ->
-                    ( model, Cmd.none )
-
                 Just c ->
                     ( { model | grid = Dict.insert c (Just n) model.grid }, Cmd.none )
 
+                Nothing ->
+                    ( model, Cmd.none )
+
         EnterNumberForCell pos n ->
             if Set.member n validNumbersForCell then
-                ( { model | grid = Dict.insert pos (Just n) model.grid }, Cmd.none )
+                let
+                    updatedGrid =
+                        Dict.insert pos (Just n) model.grid
+
+                    updatedValidation =
+                        getPossibleValuesForCells updatedGrid
+                in
+                ( { model | grid = updatedGrid, validation = updatedValidation }, Cmd.none )
 
             else
                 ( model, Cmd.none )
@@ -252,58 +172,58 @@ update msg model =
             ( { model | solved = False }, Cmd.none )
 
         SolveSingleStep ->
-            -- Find cell with lowest "entropy", lowest amount of possible values, continue until all cells have been filled
             let
-                validation =
-                    validate model.grid
+                filledCells =
+                    Dict.filter (\_ -> \v -> v /= Nothing) model.grid
 
-                cellsWithEntropy : List ( ( Int, Int ), Int )
-                cellsWithEntropy =
+                ( positions, lowestEntropy ) =
                     Dict.foldr
                         (\pos ->
-                            \{ possibleValues } ->
-                                \acc ->
-                                    case Dict.get pos model.grid |> Maybe.andThen identity of
-                                        Just _ ->
-                                            acc
+                            \possibleValues ->
+                                \(( positions_, lowest ) as acc) ->
+                                    if Dict.member pos filledCells then
+                                        acc
 
-                                        Nothing ->
-                                            ( pos, Set.size possibleValues ) :: acc
+                                    else
+                                        let
+                                            amount =
+                                                Set.size possibleValues
+                                        in
+                                        case Basics.compare amount lowest of
+                                            GT ->
+                                                -- The amount is higher than the current lowest
+                                                -- Ignore position and return existing accumulator
+                                                acc
+
+                                            EQ ->
+                                                -- The amount is equal to that of the current lowest
+                                                -- Add position to list of possible positions
+                                                ( pos :: positions_, lowest )
+
+                                            LT ->
+                                                -- The amount is lower than current lowest
+                                                -- Replace current list of positions
+                                                ( [ pos ], amount )
                         )
-                        []
-                        validation
-
-                cellsWithLowestEntropy : List ( ( Int, Int ), Int )
-                cellsWithLowestEntropy =
-                    case cellsWithEntropy |> List.sortBy Tuple.second of
-                        head :: rest ->
-                            let
-                                minAmount =
-                                    Tuple.second head
-                            in
-                            head :: List.filter (\x -> Tuple.second x == minAmount) rest
-
-                        x ->
-                            x
-
-                -- Take a random cell with the lowest entropy
-                -- Select a random possible value for that cell
-                -- Continue until all cells is filled
+                        ( [], 10 )
+                        model.validation
             in
-            case cellsWithLowestEntropy of
-                head :: _ ->
-                    if Tuple.second head == 0 then
-                        let
-                            ( m, msg_ ) =
-                                init ()
-                        in
-                        ( { m | solved = False }, msg_ )
+            -- We're stuck, we have a cell which have no possible values
+            -- Just reset and try to solve again
+            if lowestEntropy == 0 then
+                let
+                    ( m, msg_ ) =
+                        init ()
+                in
+                ( { m | solved = False }, msg_ )
 
-                    else
-                        ( model, Random.generate RandomCell (Random.Extra.sample (cellsWithLowestEntropy |> List.map Tuple.first) |> Random.map (Maybe.withDefault ( 0, 0 ))) )
+            else
+                case positions of
+                    [] ->
+                        ( { model | solved = True }, Cmd.none )
 
-                _ ->
-                    ( { model | solved = True }, Cmd.none )
+                    _ ->
+                        ( model, Random.generate RandomCell (Random.Extra.sample positions |> Random.map (Maybe.withDefault ( 0, 0 ))) )
 
         RandomCell pos ->
             case Dict.get pos model.grid |> Maybe.andThen identity of
@@ -311,16 +231,15 @@ update msg model =
                     ( model, Cmd.none )
 
                 Nothing ->
-                    let
-                        x =
-                            validate model.grid |> Dict.get pos |> Maybe.map .possibleValues
-                    in
-                    case x of
+                    case Dict.get pos model.validation of
                         Nothing ->
-                            Debug.todo "Shouldn't be possible"
+                            -- Shouldn't be possible
+                            ( model, Cmd.none )
 
                         Just v ->
-                            ( model, Random.generate (EnterNumberForCell pos) (Random.Extra.sample (Set.toList v) |> Random.map (Maybe.withDefault 0)) )
+                            ( model
+                            , Random.generate (EnterNumberForCell pos) (Random.Set.sample v |> Random.map (Maybe.withDefault 0))
+                            )
 
         Reset ->
             init ()
@@ -331,10 +250,6 @@ update msg model =
 
 view : Model -> Browser.Document Msg
 view model =
-    let
-        validation =
-            validate model.grid
-    in
     { title = "Sudoku wave function collapse algorithm"
     , body =
         [ Html.div [ Html.Attributes.class "container" ]
@@ -342,19 +257,10 @@ view model =
                 (Dict.toList model.grid
                     |> List.map
                         (\( ( y, x ) as pos, v ) ->
-                            let
-                                v_ =
-                                    Dict.get pos validation
-
-                                isFocused =
-                                    model.focusedCell == Just pos
-                            in
                             Html.div
                                 [ id (String.fromInt y ++ "," ++ String.fromInt x)
                                 , Html.Attributes.classList
-                                    [ ( "focused", isFocused )
-                                    , ( "error", Maybe.map .state v_ == Just Error )
-                                    , ( "okay", Maybe.map .state v_ == Just Okay )
+                                    [ ( "focused", model.focusedCell == Just pos )
                                     ]
                                 , Html.Events.onClick (FocusCell pos)
                                 ]
@@ -363,7 +269,15 @@ view model =
                                         [ Html.text (fromInt v__) ]
 
                                     Nothing ->
-                                        List.map (\s -> Html.div [ Html.Attributes.class "possible", Html.Events.onClick (EnterNumberForCell pos s) ] [ Html.text (fromInt s) ]) (Maybe.map (.possibleValues >> Set.toList) v_ |> Maybe.withDefault [])
+                                        List.map
+                                            (\s ->
+                                                Html.div
+                                                    [ Html.Attributes.class "possible"
+                                                    , Html.Events.onClick (EnterNumberForCell pos s)
+                                                    ]
+                                                    [ Html.text (fromInt s) ]
+                                            )
+                                            (model.validation |> Dict.get pos |> Maybe.map Set.toList |> Maybe.withDefault [])
                                 )
                         )
                 )
@@ -378,6 +292,82 @@ view model =
             ]
         ]
     }
+
+
+
+-- HELPERS
+
+
+center : ( Int, Int )
+center =
+    ( 4, 4 )
+
+
+horizontal : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+horizontal g ( y, x ) =
+    List.range 0 8
+        |> List.filter (\x_ -> x_ /= x)
+        |> List.filterMap (\x_ -> Dict.get ( y, x_ ) g |> Maybe.andThen identity)
+
+
+vertical : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+vertical g ( y, x ) =
+    List.range 0 8
+        |> List.filter (\y_ -> y_ /= y)
+        |> List.filterMap (\y_ -> Dict.get ( y_, x ) g |> Maybe.andThen identity)
+
+
+valuesInSubGrid : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+valuesInSubGrid g (( y, x ) as pos) =
+    let
+        ( subGridY, subGridX ) =
+            ( floor (toFloat y / 3), floor (toFloat x / 3) )
+
+        offsets =
+            [ ( 0, 0 )
+            , ( 0, 1 )
+            , ( 0, 2 )
+            , ( 1, 0 )
+            , ( 1, 1 )
+            , ( 1, 2 )
+            , ( 2, 0 )
+            , ( 2, 1 )
+            , ( 2, 2 )
+            ]
+    in
+    offsets
+        |> List.map (Tuple.mapBoth ((+) (subGridY * 3)) ((+) (subGridX * 3)))
+        |> List.filter (\p -> p /= pos)
+        |> List.filterMap (\p -> Dict.get p g |> Maybe.andThen identity)
+
+
+validNumbersForCell : Set.Set number
+validNumbersForCell =
+    Set.fromList [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
+
+
+getPossibleValuesForCells : Dict ( Int, Int ) (Maybe Int) -> Dict ( Int, Int ) (Set.Set Int)
+getPossibleValuesForCells =
+    let
+        rules =
+            [ horizontal, vertical, valuesInSubGrid ]
+    in
+    \g ->
+        Dict.map
+            (\pos ->
+                \_ ->
+                    rules
+                        |> List.concatMap (\rule -> rule g pos)
+                        |> Set.fromList
+                        |> Set.diff validNumbersForCell
+            )
+            g
+
+
+generateGrid : List ( ( Int, Int ), Maybe Int )
+generateGrid =
+    -- 9*9 = 81, range is end inclusive
+    List.range 0 80 |> List.map (\x -> ( ( modBy 9 x, x // 9 ), Nothing ))
 
 
 keyDecoder : Decode.Decoder Msg
@@ -406,9 +396,6 @@ toKey keyValue =
 
                 nine =
                     57
-
-                space =
-                    32
             in
             if between zero nine code then
                 EnterNumber (code - zero)
