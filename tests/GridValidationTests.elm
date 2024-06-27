@@ -2,18 +2,13 @@ module GridValidationTests exposing (..)
 
 import Dict exposing (Dict)
 import Expect
-import Main exposing (CellState(..), validate)
+import Main exposing (CellState(..), grid, validate)
+import Set
 import Test exposing (Test, describe, test)
 
 
-type alias TestCase =
-    { input : Dict ( Int, Int ) (Maybe Int)
-    , expected : Dict ( Int, Int ) CellState
-    }
-
-
-testCases : List { input : Dict ( Int, Int ) (Maybe Int), expected : Dict ( Int, Int ) CellState }
-testCases =
+cellStateTestCases : List { input : Dict ( Int, Int ) (Maybe Int), expected : Dict ( Int, Int ) CellState }
+cellStateTestCases =
     [ { input = Dict.fromList [], expected = Dict.fromList [] }
     , { input = Dict.fromList [ ( ( 0, 0 ), Just 2 ) ]
       , expected = Dict.fromList [ ( ( 0, 0 ), Okay ) ]
@@ -27,11 +22,29 @@ testCases =
 suite : Test
 suite =
     describe "Validate sudoku rules"
-        (List.map
-            (\{ input, expected } ->
-                test (Debug.toString input ++ " = " ++ Debug.toString expected) <|
-                    \_ ->
-                        validate input |> Expect.equalDicts expected
+        [ describe "Cell states"
+            (List.map
+                (\{ input, expected } ->
+                    test (Debug.toString input ++ " = " ++ Debug.toString expected) <|
+                        \_ ->
+                            validate input |> Dict.map (\_ -> \v -> v.state) |> Expect.equalDicts expected
+                )
+                cellStateTestCases
             )
-            testCases
-        )
+        , describe "Possible values"
+            [ test "Should be possible to select five" <|
+                \_ ->
+                    let
+                        g =
+                            grid |> Dict.fromList |> Dict.insert ( 0, 1 ) (Just 5)
+
+                        validation =
+                            validate g
+                    in
+                    Maybe.map2
+                        (\a -> \b -> Expect.equalSets a b)
+                        (Dict.get ( 4, 4 ) validation |> Maybe.map .possibleValues)
+                        (Just (Set.fromList [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]))
+                        |> Maybe.withDefault (Expect.fail "hello")
+            ]
+        ]

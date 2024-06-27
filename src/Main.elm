@@ -80,40 +80,63 @@ valuesInSubGrid g pos =
             subGrid pos
 
         offsets =
-            [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 0, 2 ), ( 1, 2 ), ( 2, 2 ) ]
+            [ ( 0, 1 )
+            , ( 0, 1 )
+            , ( 0, 2 )
+            , ( 1, 0 )
+            , ( 1, 1 )
+            , ( 1, 2 )
+            , ( 2, 0 )
+            , ( 2, 1 )
+            , ( 2, 2 )
+            ]
     in
     offsets
-        |> List.map (Tuple.mapBoth ((*) y) ((*) x))
+        |> List.map (Tuple.mapBoth ((+) (y * 3)) ((+) (x * 3)))
         |> List.filter (\p -> p /= pos)
         |> List.map (\p -> Dict.get p g)
         |> List.filterMap identity
         |> List.filterMap identity
 
 
-validate : Dict ( Int, Int ) (Maybe Int) -> Dict ( Int, Int ) CellState
+type alias ValidationResult =
+    { state : CellState
+    , possibleValues : Set.Set Int
+    }
+
+
+possibleValues : Set.Set number
+possibleValues =
+    Set.fromList [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
+
+
+validate : Dict ( Int, Int ) (Maybe Int) -> Dict ( Int, Int ) ValidationResult
 validate g =
     g
         |> Dict.map
-            (\( y, x ) ->
+            (\pos ->
                 \v_ ->
+                    let
+                        used =
+                            [ horizontal, vertical, valuesInSubGrid ]
+                                |> List.map (\x_ -> x_ g pos)
+                                |> List.concat
+                                |> Set.fromList
+
+                        p =
+                            Set.diff possibleValues used
+                    in
                     case v_ of
                         Nothing ->
-                            Undefined
+                            { state = Undefined, possibleValues = p }
 
                         Just v__ ->
                             -- Validate axis and subgrid
-                            let
-                                used =
-                                    [ horizontal, vertical, valuesInSubGrid ]
-                                        |> List.map (\x_ -> x_ g ( y, x ))
-                                        |> List.concat
-                                        |> Set.fromList
-                            in
                             if Set.member v__ used then
-                                Error
+                                { state = Error, possibleValues = p }
 
                             else
-                                Okay
+                                { state = Okay, possibleValues = p }
             )
 
 
@@ -135,6 +158,7 @@ type Msg
     | FocusCellAbove
     | FocusCellBelow
     | EnterNumber Int
+    | EnterNumberForCell ( Int, Int ) Int
     | ClearFocusedCell
     | NoOp
 
@@ -201,6 +225,9 @@ update msg model =
                 Just c ->
                     ( { model | grid = Dict.insert c (Just n) model.grid }, Cmd.none )
 
+        EnterNumberForCell pos n ->
+            ( { model | grid = Dict.insert pos (Just n) model.grid }, Cmd.none )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -212,7 +239,7 @@ view model =
             validate model.grid
 
         _ =
-            Debug.log "validation" validation
+            Debug.log "validation" (Dict.filter (\_ -> \x -> x.state /= Undefined) validation)
     in
     { title = "Document Title"
     , body =
@@ -220,17 +247,30 @@ view model =
             [ Html.div [ Html.Attributes.class "grid" ]
                 (Dict.toList model.grid
                     |> List.map
-                        (\( ( x, y ), v ) ->
+                        (\( ( y, x ) as pos, v ) ->
+                            let
+                                v_ =
+                                    Dict.get pos validation
+
+                                isFocused =
+                                    model.focusedCell == Just pos
+                            in
                             Html.div
                                 [ id (String.fromInt y ++ "," ++ String.fromInt x)
                                 , Html.Attributes.classList
-                                    [ ( "focused", model.focusedCell == Just ( x, y ) )
-                                    , ( "error", Dict.get ( x, y ) validation == Just Error )
-                                    , ( "okay", Dict.get ( x, y ) validation == Just Okay )
+                                    [ ( "focused", isFocused )
+                                    , ( "error", Maybe.map .state v_ == Just Error )
+                                    , ( "okay", Maybe.map .state v_ == Just Okay )
                                     ]
-                                , Html.Events.onClick (FocusCell ( x, y ))
+                                , Html.Events.onClick (FocusCell pos)
                                 ]
-                                [ Html.text (v |> Maybe.map fromInt |> Maybe.withDefault "") ]
+                                (case v of
+                                    Just v__ ->
+                                        [ Html.text (fromInt v__) ]
+
+                                    Nothing ->
+                                        List.map (\s -> Html.div [ Html.Attributes.class "possible", Html.Events.onClick (EnterNumberForCell pos s) ] [ Html.text (fromInt s) ]) (Maybe.map (.possibleValues >> Set.toList) v_ |> Maybe.withDefault [])
+                                )
                         )
                 )
             , Html.div

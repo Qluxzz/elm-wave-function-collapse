@@ -26,12 +26,14 @@ body {
     grid-template-columns: repeat(9, var(--cell-size));
     grid-template-rows: repeat(9, var(--cell-size));
 
-    & div {
+    >div {
         outline: 1px solid #eee;
-        display: flex;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
         align-items: center;
         justify-content: center;
         font-size: 40px;
+        text-align: center;
 
         &.focused {
             outline: 2px solid green !important;
@@ -50,7 +52,7 @@ body {
     pointer-events: none;
     outline: 2px solid #000;
 
-    & div {
+    >div {
         outline: 1px solid #000;
     }
 }
@@ -61,4 +63,9 @@ body {
 
 .okay {
     background-color: green;
+}
+
+.possible {
+    font-size: 16px !important;
+    text-align: center;
 }
