@@ -7,8 +7,12 @@ import Html
 import Html.Attributes exposing (id)
 import Html.Events
 import Json.Decode as Decode
+import Platform.Cmd as Cmd
+import Random
+import Random.Extra
 import Set
 import String exposing (fromInt)
+import Time
 
 
 
@@ -28,22 +32,30 @@ main =
         , view = view
         , update = update
         , subscriptions =
-            \_ ->
+            \model ->
                 Sub.batch
-                    [ Browser.Events.onKeyUp keyDecoder
-                    ]
+                    (Browser.Events.onKeyUp keyDecoder
+                        :: (if not model.solved then
+                                [ Time.every 10 (\_ -> SolveSingleStep) ]
+
+                            else
+                                []
+                           )
+                    )
         }
 
 
 type alias Model =
     { grid : Dict ( Int, Int ) (Maybe Int)
     , focusedCell : Maybe ( Int, Int )
+    , solverSpeedMs : Int
+    , solved : Bool
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init () =
-    ( { grid = Dict.fromList generateGrid, focusedCell = Nothing }, Cmd.none )
+    ( { grid = Dict.fromList generateGrid, focusedCell = Nothing, solverSpeedMs = 1000, solved = True }, Cmd.none )
 
 
 type CellState
@@ -160,6 +172,10 @@ type Msg
     | EnterNumber Int
     | EnterNumberForCell ( Int, Int ) Int
     | ClearFocusedCell
+    | RandomCell ( Int, Int )
+    | AutoSolve
+    | SolveSingleStep
+    | Reset
     | NoOp
 
 
@@ -226,7 +242,88 @@ update msg model =
                     ( { model | grid = Dict.insert c (Just n) model.grid }, Cmd.none )
 
         EnterNumberForCell pos n ->
-            ( { model | grid = Dict.insert pos (Just n) model.grid }, Cmd.none )
+            if Set.member n validNumbersForCell then
+                ( { model | grid = Dict.insert pos (Just n) model.grid }, Cmd.none )
+
+            else
+                ( model, Cmd.none )
+
+        AutoSolve ->
+            ( { model | solved = False }, Cmd.none )
+
+        SolveSingleStep ->
+            -- Find cell with lowest "entropy", lowest amount of possible values, continue until all cells have been filled
+            let
+                validation =
+                    validate model.grid
+
+                cellsWithEntropy : List ( ( Int, Int ), Int )
+                cellsWithEntropy =
+                    Dict.foldr
+                        (\pos ->
+                            \{ possibleValues } ->
+                                \acc ->
+                                    case Dict.get pos model.grid |> Maybe.andThen identity of
+                                        Just _ ->
+                                            acc
+
+                                        Nothing ->
+                                            ( pos, Set.size possibleValues ) :: acc
+                        )
+                        []
+                        validation
+
+                cellsWithLowestEntropy : List ( ( Int, Int ), Int )
+                cellsWithLowestEntropy =
+                    case cellsWithEntropy |> List.sortBy Tuple.second of
+                        head :: rest ->
+                            let
+                                minAmount =
+                                    Tuple.second head
+                            in
+                            head :: List.filter (\x -> Tuple.second x == minAmount) rest
+
+                        x ->
+                            x
+
+                -- Take a random cell with the lowest entropy
+                -- Select a random possible value for that cell
+                -- Continue until all cells is filled
+            in
+            case cellsWithLowestEntropy of
+                head :: _ ->
+                    if Tuple.second head == 0 then
+                        let
+                            ( m, msg_ ) =
+                                init ()
+                        in
+                        ( { m | solved = False }, msg_ )
+
+                    else
+                        ( model, Random.generate RandomCell (Random.Extra.sample (cellsWithLowestEntropy |> List.map Tuple.first) |> Random.map (Maybe.withDefault ( 0, 0 ))) )
+
+                _ ->
+                    ( { model | solved = True }, Cmd.none )
+
+        RandomCell pos ->
+            case Dict.get pos model.grid |> Maybe.andThen identity of
+                Just _ ->
+                    ( model, Cmd.none )
+
+                Nothing ->
+                    let
+                        x =
+                            validate model.grid |> Dict.get pos |> Maybe.map .possibleValues
+                    in
+                    case x of
+                        Nothing ->
+                            Debug.todo "Shouldn't be possible"
+
+                        Just v ->
+                            ( model, Random.generate (EnterNumberForCell pos) (Random.Extra.sample (Set.toList v) |> Random.map (Maybe.withDefault 0)) )
+
+        Reset ->
+            init ()
 
         NoOp ->
             ( model, Cmd.none )
@@ -273,6 +370,11 @@ view model =
             , Html.div
                 [ Html.Attributes.class "sub-grid" ]
                 (List.range 0 8 |> List.map (\_ -> Html.div [] []))
+            ]
+        , Html.div [ Html.Attributes.class "actions" ]
+            [ Html.button [ Html.Events.onClick AutoSolve ] [ Html.text "Auto solve" ]
+            , Html.button [ Html.Events.onClick SolveSingleStep ] [ Html.text "Step" ]
+            , Html.button [ Html.Events.onClick Reset ] [ Html.text "Reset" ]
             ]
         ]
     }
