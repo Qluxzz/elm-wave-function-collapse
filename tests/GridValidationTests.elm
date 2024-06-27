@@ -2,7 +2,7 @@ module GridValidationTests exposing (..)
 
 import Dict exposing (Dict)
 import Expect
-import Main exposing (CellState(..), grid, validate)
+import Main exposing (CellState(..), generateGrid, validate)
 import Set
 import Test exposing (Test, describe, test)
 
@@ -36,7 +36,7 @@ suite =
                 \_ ->
                     let
                         g =
-                            grid |> Dict.fromList |> Dict.insert ( 0, 1 ) (Just 5)
+                            generateGrid |> Dict.fromList |> Dict.insert ( 0, 1 ) (Just 5)
 
                         validation =
                             validate g
@@ -45,6 +45,20 @@ suite =
                         (\a -> \b -> Expect.equalSets a b)
                         (Dict.get ( 4, 4 ) validation |> Maybe.map .possibleValues)
                         (Just (Set.fromList [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]))
+                        |> Maybe.withDefault (Expect.fail "hello")
+            , test "Should not be possible to select one" <|
+                \_ ->
+                    let
+                        g =
+                            generateGrid |> Dict.fromList |> Dict.insert ( 0, 0 ) (Just 1)
+
+                        validation =
+                            validate g
+                    in
+                    Maybe.map2
+                        (\a -> \b -> Expect.equalSets a b)
+                        (Dict.get ( 1, 1 ) validation |> Maybe.map .possibleValues)
+                        (Just (Set.fromList [ 2, 3, 4, 5, 6, 7, 8, 9 ]))
                         |> Maybe.withDefault (Expect.fail "hello")
             ]
         ]

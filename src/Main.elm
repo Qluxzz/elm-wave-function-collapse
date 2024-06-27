@@ -43,7 +43,7 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init () =
-    ( { grid = Dict.fromList grid, focusedCell = Nothing }, Cmd.none )
+    ( { grid = Dict.fromList generateGrid, focusedCell = Nothing }, Cmd.none )
 
 
 type CellState
@@ -80,7 +80,7 @@ valuesInSubGrid g pos =
             subGrid pos
 
         offsets =
-            [ ( 0, 1 )
+            [ ( 0, 0 )
             , ( 0, 1 )
             , ( 0, 2 )
             , ( 1, 0 )
@@ -105,8 +105,8 @@ type alias ValidationResult =
     }
 
 
-possibleValues : Set.Set number
-possibleValues =
+validNumbersForCell : Set.Set number
+validNumbersForCell =
     Set.fromList [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
 
 
@@ -124,7 +124,7 @@ validate g =
                                 |> Set.fromList
 
                         p =
-                            Set.diff possibleValues used
+                            Set.diff validNumbersForCell used
                     in
                     case v_ of
                         Nothing ->
@@ -140,8 +140,8 @@ validate g =
             )
 
 
-grid : List ( ( Int, Int ), Maybe Int )
-grid =
+generateGrid : List ( ( Int, Int ), Maybe Int )
+generateGrid =
     List.foldl
         (\y ->
             \acc ->
@@ -237,9 +237,6 @@ view model =
     let
         validation =
             validate model.grid
-
-        _ =
-            Debug.log "validation" (Dict.filter (\_ -> \x -> x.state /= Undefined) validation)
     in
     { title = "Document Title"
     , body =
