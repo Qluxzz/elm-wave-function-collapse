@@ -335,7 +335,7 @@ view model =
         validation =
             validate model.grid
     in
-    { title = "Document Title"
+    { title = "Sudoku wave function collapse algorithm"
     , body =
         [ Html.div [ Html.Attributes.class "container" ]
             [ Html.div [ Html.Attributes.class "grid" ]
