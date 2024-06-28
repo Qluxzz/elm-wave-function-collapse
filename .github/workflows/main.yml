@@ -47,7 +47,7 @@ jobs:
           mv style.css build/
 
       - name: Upload production artifacts
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           name: github-pages
           path: build/
