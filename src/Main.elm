@@ -37,7 +37,7 @@ main =
                 Sub.batch
                     (Browser.Events.onKeyUp keyDecoder
                         :: (if not model.solved then
-                                [ Time.every 100 (\_ -> SolveSingleStep) ]
+                                [ Time.every 50 (\_ -> SolveSingleStep) ]
 
                             else
                                 []
@@ -192,7 +192,7 @@ update msg model =
                                         case Basics.compare amount lowest of
                                             GT ->
                                                 -- The amount is higher than the current lowest
-                                                -- Ignore position and return existing accumulator
+                                                -- Ignore position and continue with next position
                                                 acc
 
                                             EQ ->
@@ -210,6 +210,7 @@ update msg model =
             in
             -- We're stuck, we have a cell which have no possible values
             -- Just reset and try to solve again
+            -- Solving the contradiction is usually trickier (Straight from the WFC wizard himself https://x.com/OskSta/status/1218477384095141889)
             if lowestEntropy == 0 then
                 let
                     ( m, msg_ ) =
@@ -289,6 +290,9 @@ view model =
             [ Html.button [ Html.Events.onClick AutoSolve ] [ Html.text "Auto solve" ]
             , Html.button [ Html.Events.onClick SolveSingleStep ] [ Html.text "Step" ]
             , Html.button [ Html.Events.onClick Reset ] [ Html.text "Reset" ]
+            ]
+        , Html.div [ Html.Attributes.class "attributions" ]
+            [ Html.span [] [ Html.text "Inspired by: ", Html.a [ Html.Attributes.href "https://www.youtube.com/watch?v=2SuvO4Gi7uY", Html.Attributes.target "_blank", Html.Attributes.rel "noopener" ] [ Html.text "Superpositions, Sudoku, the Wave Function Collapse algorithm" ] ]
             ]
         ]
     }
