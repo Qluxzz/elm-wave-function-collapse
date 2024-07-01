@@ -18,7 +18,7 @@ import Time
 
 
 {-
-   Sudoku solver based on collapsing waveform algorithm
+   Sudoku solver based on wave collapse algorithm
 
    Rules of sudoku:
     * 9x9 grid (sub grids of 3*3) where a number 1-9 can be placed
@@ -78,7 +78,6 @@ type Msg
     | EnterNumber Int
     | EnterNumberForCell ( Int, Int ) Int
     | ClearFocusedCell
-    | RandomCell ( Int, Int )
     | AutoSolve
     | SolveSingleStep
     | Reset
@@ -224,23 +223,9 @@ update msg model =
                         ( { model | solved = True }, Cmd.none )
 
                     _ ->
-                        ( model, Random.generate RandomCell (Random.Extra.sample positions |> Random.map (Maybe.withDefault ( 0, 0 ))) )
-
-        RandomCell pos ->
-            case Dict.get pos model.grid |> Maybe.andThen identity of
-                Just _ ->
-                    ( model, Cmd.none )
-
-                Nothing ->
-                    case Dict.get pos model.validation of
-                        Nothing ->
-                            -- Shouldn't be possible
-                            ( model, Cmd.none )
-
-                        Just v ->
-                            ( model
-                            , Random.generate (EnterNumberForCell pos) (Random.Set.sample v |> Random.map (Maybe.withDefault 0))
-                            )
+                        ( model
+                        , Random.generate identity (generatePossibleValueForPosition positions model.validation)
+                        )
 
         Reset ->
             init ()
@@ -426,3 +411,31 @@ toKey keyValue =
 
                 _ ->
                     NoOp
+
+
+generatePossibleValueForPosition : List ( Int, Int ) -> Dict ( Int, Int ) (Set.Set Int) -> Random.Generator Msg
+generatePossibleValueForPosition positions validation =
+    Random.Extra.sample positions
+        |> Random.andThen
+            (\maybePos ->
+                case maybePos of
+                    Just pos ->
+                        case Dict.get pos validation of
+                            Just valuesSet ->
+                                Random.Set.sample valuesSet
+                                    |> Random.map
+                                        (\maybeVal ->
+                                            case maybeVal of
+                                                Just v ->
+                                                    EnterNumberForCell pos v
+
+                                                Nothing ->
+                                                    NoOp
+                                        )
+
+                            Nothing ->
+                                Random.constant NoOp
+
+                    Nothing ->
+                        Random.constant NoOp
+            )
