@@ -89,44 +89,16 @@ update msg model =
             ( { model | focusedCell = Just c }, Cmd.none )
 
         FocusNextCell ->
-            let
-                next =
-                    model.focusedCell
-                        |> Maybe.map (\( y, x ) -> ( y, modBy 9 (x + 1) ))
-                        |> Maybe.withDefault center
-                        |> Just
-            in
-            ( { model | focusedCell = next }, Cmd.none )
+            ( { model | focusedCell = focusCellWithDefault (\( y, x ) -> ( y, modBy 9 (x + 1) )) model.focusedCell }, Cmd.none )
 
         FocusPreviousCell ->
-            let
-                previous =
-                    model.focusedCell
-                        |> Maybe.map (\( y, x ) -> ( y, modBy 9 (x - 1) ))
-                        |> Maybe.withDefault center
-                        |> Just
-            in
-            ( { model | focusedCell = previous }, Cmd.none )
+            ( { model | focusedCell = focusCellWithDefault (\( y, x ) -> ( y, modBy 9 (x - 1) )) model.focusedCell }, Cmd.none )
 
         FocusCellAbove ->
-            let
-                above =
-                    model.focusedCell
-                        |> Maybe.map (\( y, x ) -> ( modBy 9 (y - 1), x ))
-                        |> Maybe.withDefault center
-                        |> Just
-            in
-            ( { model | focusedCell = above }, Cmd.none )
+            ( { model | focusedCell = focusCellWithDefault (\( y, x ) -> ( modBy 9 (y - 1), x )) model.focusedCell }, Cmd.none )
 
         FocusCellBelow ->
-            let
-                below =
-                    model.focusedCell
-                        |> Maybe.map (\( y, x ) -> ( modBy 9 (y + 1), x ))
-                        |> Maybe.withDefault center
-                        |> Just
-            in
-            ( { model | focusedCell = below }, Cmd.none )
+            ( { model | focusedCell = focusCellWithDefault (\( y, x ) -> ( modBy 9 (y + 1), x )) model.focusedCell }, Cmd.none )
 
         ClearFocusedCell ->
             case model.focusedCell of
@@ -279,11 +251,6 @@ view model =
 -- HELPERS
 
 
-center : ( Int, Int )
-center =
-    ( 4, 4 )
-
-
 horizontal : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
 horizontal g ( y, x ) =
     List.range 0 8
@@ -428,3 +395,13 @@ generatePossibleValueForPosition positions grid =
                     Nothing ->
                         Random.constant NoOp
             )
+
+
+center : ( Int, Int )
+center =
+    ( 4, 4 )
+
+
+focusCellWithDefault : (( Int, Int ) -> ( Int, Int )) -> Maybe ( Int, Int ) -> Maybe ( Int, Int )
+focusCellWithDefault transform input =
+    input |> Maybe.map transform |> Maybe.withDefault center |> Just
