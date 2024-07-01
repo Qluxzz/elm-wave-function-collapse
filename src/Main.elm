@@ -48,7 +48,6 @@ main =
 
 type alias Model =
     { grid : Dict ( Int, Int ) (Maybe Int)
-    , validation : Dict ( Int, Int ) (Set.Set Int)
     , focusedCell : Maybe ( Int, Int )
     , solved : Bool
     }
@@ -61,7 +60,6 @@ init () =
             Dict.fromList generateGrid
     in
     ( { grid = g
-      , validation = getPossibleValuesForCells g
       , focusedCell = Nothing
       , solved = True
       }
@@ -136,27 +134,17 @@ update msg model =
                     let
                         updatedGrid =
                             Dict.insert c Nothing model.grid
-
-                        updatedValidation =
-                            getPossibleValuesForCells updatedGrid
                     in
-                    ( { model | grid = updatedGrid, validation = updatedValidation }, Cmd.none )
+                    ( { model | grid = updatedGrid }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
 
         EnterNumber n ->
             case model.focusedCell of
-                Just c ->
-                    if Dict.get c model.validation |> Maybe.map (Set.member n) |> Maybe.withDefault False then
-                        let
-                            updatedGrid =
-                                Dict.insert c (Just n) model.grid
-
-                            updatedValidation =
-                                getPossibleValuesForCells updatedGrid
-                        in
-                        ( { model | grid = Dict.insert c (Just n) model.grid, validation = updatedValidation }, Cmd.none )
+                Just focusedCell ->
+                    if Set.member n (getPossibleValuesForCell model.grid focusedCell) then
+                        ( { model | grid = Dict.insert focusedCell (Just n) model.grid }, Cmd.none )
 
                     else
                         ( model, Cmd.none )
@@ -165,15 +153,8 @@ update msg model =
                     ( model, Cmd.none )
 
         EnterNumberForCell pos n ->
-            if Set.member n validNumbersForCell then
-                let
-                    updatedGrid =
-                        Dict.insert pos (Just n) model.grid
-
-                    updatedValidation =
-                        getPossibleValuesForCells updatedGrid
-                in
-                ( { model | grid = updatedGrid, validation = updatedValidation }, Cmd.none )
+            if Set.member n (getPossibleValuesForCell model.grid pos) then
+                ( { model | grid = Dict.insert pos (Just n) model.grid }, Cmd.none )
 
             else
                 ( model, Cmd.none )
@@ -216,7 +197,7 @@ update msg model =
                                                 ( [ pos ], amount )
                         )
                         ( [], 10 )
-                        model.validation
+                        (getPossibleValuesForCells model.grid)
             in
             -- We're stuck, we have a cell which have no possible values
             -- Just reset and try to solve again
@@ -235,7 +216,7 @@ update msg model =
 
                     _ ->
                         ( model
-                        , Random.generate identity (generatePossibleValueForPosition positions model.validation)
+                        , Random.generate identity (generatePossibleValueForPosition positions model.grid)
                         )
 
         Reset ->
@@ -274,7 +255,7 @@ view model =
                                                     ]
                                                     [ Html.text (fromInt s) ]
                                             )
-                                            (model.validation |> Dict.get pos |> Maybe.map Set.toList |> Maybe.withDefault [])
+                                            (getPossibleValuesForCell model.grid pos |> Set.toList)
                                 )
                         )
                 )
@@ -347,21 +328,22 @@ validNumbersForCell =
 
 
 getPossibleValuesForCells : Dict ( Int, Int ) (Maybe Int) -> Dict ( Int, Int ) (Set.Set Int)
-getPossibleValuesForCells =
+getPossibleValuesForCells grid =
+    Dict.map
+        (\pos -> \_ -> getPossibleValuesForCell grid pos)
+        grid
+
+
+getPossibleValuesForCell : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> Set.Set Int
+getPossibleValuesForCell grid pos =
     let
         rules =
             [ horizontal, vertical, valuesInSubGrid ]
     in
-    \g ->
-        Dict.map
-            (\pos ->
-                \_ ->
-                    rules
-                        |> List.concatMap (\rule -> rule g pos)
-                        |> Set.fromList
-                        |> Set.diff validNumbersForCell
-            )
-            g
+    rules
+        |> List.concatMap (\rule -> rule grid pos)
+        |> Set.fromList
+        |> Set.diff validNumbersForCell
 
 
 generateGrid : List ( ( Int, Int ), Maybe Int )
@@ -424,28 +406,24 @@ toKey keyValue =
                     NoOp
 
 
-generatePossibleValueForPosition : List ( Int, Int ) -> Dict ( Int, Int ) (Set.Set Int) -> Random.Generator Msg
-generatePossibleValueForPosition positions validation =
+generatePossibleValueForPosition : List ( Int, Int ) -> Dict ( Int, Int ) (Maybe Int) -> Random.Generator Msg
+generatePossibleValueForPosition positions grid =
     Random.Extra.sample positions
         |> Random.andThen
             (\maybePos ->
                 case maybePos of
                     Just pos ->
-                        case Dict.get pos validation of
-                            Just valuesSet ->
-                                Random.Set.sample valuesSet
-                                    |> Random.map
-                                        (\maybeVal ->
-                                            case maybeVal of
-                                                Just v ->
-                                                    EnterNumberForCell pos v
+                        getPossibleValuesForCell grid pos
+                            |> Random.Set.sample
+                            |> Random.map
+                                (\maybeVal ->
+                                    case maybeVal of
+                                        Just v ->
+                                            EnterNumberForCell pos v
 
-                                                Nothing ->
-                                                    NoOp
-                                        )
-
-                            Nothing ->
-                                Random.constant NoOp
+                                        Nothing ->
+                                            NoOp
+                                )
 
                     Nothing ->
                         Random.constant NoOp
