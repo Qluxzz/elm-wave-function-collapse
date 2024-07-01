@@ -148,7 +148,18 @@ update msg model =
         EnterNumber n ->
             case model.focusedCell of
                 Just c ->
-                    ( { model | grid = Dict.insert c (Just n) model.grid }, Cmd.none )
+                    if Dict.get c model.validation |> Maybe.map (Set.member n) |> Maybe.withDefault False then
+                        let
+                            updatedGrid =
+                                Dict.insert c (Just n) model.grid
+
+                            updatedValidation =
+                                getPossibleValuesForCells updatedGrid
+                        in
+                        ( { model | grid = Dict.insert c (Just n) model.grid, validation = updatedValidation }, Cmd.none )
+
+                    else
+                        ( model, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
