@@ -139,7 +139,7 @@ update msg model =
                 filledCells =
                     Dict.filter (\_ -> \v -> v /= Nothing) model.grid
 
-                ( positions, lowestEntropy ) =
+                ( positions, fewestPossibleValues ) =
                     Dict.foldr
                         (\pos ->
                             \possibleValues ->
@@ -174,7 +174,7 @@ update msg model =
             -- We're stuck, we have a cell which have no possible values
             -- Just reset and try to solve again
             -- Solving the contradiction is usually trickier (Straight from the WFC wizard himself https://x.com/OskSta/status/1218477384095141889)
-            if lowestEntropy == 0 then
+            if fewestPossibleValues == 0 then
                 let
                     ( m, msg_ ) =
                         init ()
