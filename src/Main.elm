@@ -29,7 +29,7 @@ import Time
 main : Program () Model Msg
 main =
     Browser.document
-        { init = init
+        { init = \_ -> init Nothing
         , view = view
         , update = update
         , subscriptions =
@@ -46,20 +46,26 @@ main =
         }
 
 
+type alias Grid =
+    Dict ( Int, Int ) (Maybe Int)
+
+
 type alias Model =
-    { grid : Dict ( Int, Int ) (Maybe Int)
+    { grid : Grid
+    , gridTemplate : Maybe Grid
     , focusedCell : Maybe ( Int, Int )
     , solved : Bool
     }
 
 
-init : () -> ( Model, Cmd Msg )
-init () =
+init : Maybe Grid -> ( Model, Cmd Msg )
+init startingGrid =
     let
         g =
-            Dict.fromList generateGrid
+            startingGrid |> Maybe.withDefault (Dict.fromList generateGrid)
     in
     ( { grid = g
+      , gridTemplate = startingGrid
       , focusedCell = Nothing
       , solved = True
       }
@@ -132,7 +138,7 @@ update msg model =
                 ( model, Cmd.none )
 
         AutoSolve ->
-            ( { model | solved = False }, Cmd.none )
+            ( { model | solved = False, gridTemplate = Just model.grid }, Cmd.none )
 
         SolveSingleStep ->
             let
@@ -177,7 +183,7 @@ update msg model =
             if fewestPossibleValues == 0 then
                 let
                     ( m, msg_ ) =
-                        init ()
+                        init model.gridTemplate
                 in
                 ( { m | solved = False }, msg_ )
 
@@ -192,7 +198,11 @@ update msg model =
                         )
 
         Reset ->
-            init ()
+            if Just model.grid == model.gridTemplate then
+                init Nothing
+
+            else
+                init model.gridTemplate
 
         NoOp ->
             ( model, Cmd.none )
@@ -238,7 +248,15 @@ view model =
         , Html.div [ Html.Attributes.class "actions" ]
             [ Html.button [ Html.Events.onClick AutoSolve ] [ Html.text "Auto solve" ]
             , Html.button [ Html.Events.onClick SolveSingleStep ] [ Html.text "Step" ]
-            , Html.button [ Html.Events.onClick Reset ] [ Html.text "Reset" ]
+            , Html.button [ Html.Events.onClick Reset ]
+                [ Html.text
+                    (if model.gridTemplate == Just model.grid then
+                        "Reset All"
+
+                     else
+                        "Reset"
+                    )
+                ]
             ]
         , Html.div [ Html.Attributes.class "attributions" ]
             [ Html.span [] [ Html.text "Inspired by: ", Html.a [ Html.Attributes.href "https://www.youtube.com/watch?v=2SuvO4Gi7uY", Html.Attributes.target "_blank", Html.Attributes.rel "noopener" ] [ Html.text "Superpositions, Sudoku, the Wave Function Collapse algorithm" ] ]
@@ -251,21 +269,21 @@ view model =
 -- HELPERS
 
 
-horizontal : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+horizontal : Grid -> ( Int, Int ) -> List Int
 horizontal g ( y, x ) =
     List.range 0 8
         |> List.filter (\x_ -> x_ /= x)
         |> List.filterMap (\x_ -> Dict.get ( y, x_ ) g |> Maybe.andThen identity)
 
 
-vertical : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+vertical : Grid -> ( Int, Int ) -> List Int
 vertical g ( y, x ) =
     List.range 0 8
         |> List.filter (\y_ -> y_ /= y)
         |> List.filterMap (\y_ -> Dict.get ( y_, x ) g |> Maybe.andThen identity)
 
 
-valuesInSubGrid : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> List Int
+valuesInSubGrid : Grid -> ( Int, Int ) -> List Int
 valuesInSubGrid g (( y, x ) as pos) =
     let
         ( subGridY, subGridX ) =
@@ -294,14 +312,14 @@ validNumbersForCell =
     Set.fromList [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
 
 
-getPossibleValuesForCells : Dict ( Int, Int ) (Maybe Int) -> Dict ( Int, Int ) (Set.Set Int)
+getPossibleValuesForCells : Grid -> Dict ( Int, Int ) (Set.Set Int)
 getPossibleValuesForCells grid =
     Dict.map
         (\pos -> \_ -> getPossibleValuesForCell grid pos)
         grid
 
 
-getPossibleValuesForCell : Dict ( Int, Int ) (Maybe Int) -> ( Int, Int ) -> Set.Set Int
+getPossibleValuesForCell : Grid -> ( Int, Int ) -> Set.Set Int
 getPossibleValuesForCell grid pos =
     let
         rules =
@@ -373,7 +391,7 @@ toKey keyValue =
                     NoOp
 
 
-generatePossibleValueForPosition : List ( Int, Int ) -> Dict ( Int, Int ) (Maybe Int) -> Random.Generator Msg
+generatePossibleValueForPosition : List ( Int, Int ) -> Grid -> Random.Generator Msg
 generatePossibleValueForPosition positions grid =
     Random.Extra.sample positions
         |> Random.andThen
