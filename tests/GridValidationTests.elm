@@ -2,7 +2,7 @@ module GridValidationTests exposing (suite)
 
 import Dict
 import Expect
-import Main exposing (generateGrid, getPossibleValuesForCells)
+import Main exposing (defaultGrid, getPossibleValuesForCells)
 import Set
 import Test exposing (Test, describe, test)
 
@@ -15,7 +15,7 @@ suite =
                 \_ ->
                     let
                         g =
-                            generateGrid |> Dict.fromList |> Dict.insert ( 0, 1 ) (Just 5)
+                            defaultGrid |> Dict.insert ( 0, 1 ) (Just 5)
 
                         validation =
                             getPossibleValuesForCells g
@@ -29,7 +29,7 @@ suite =
                 \_ ->
                     let
                         g =
-                            generateGrid |> Dict.fromList |> Dict.insert ( 0, 0 ) (Just 1)
+                            defaultGrid |> Dict.insert ( 0, 0 ) (Just 1)
 
                         validation =
                             getPossibleValuesForCells g

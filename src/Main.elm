@@ -1,4 +1,4 @@
-module Main exposing (generateGrid, getPossibleValuesForCells, main)
+module Main exposing (defaultGrid, getPossibleValuesForCells, main)
 
 import Browser
 import Browser.Events
@@ -62,7 +62,7 @@ init : Maybe Grid -> ( Model, Cmd Msg )
 init startingGrid =
     let
         g =
-            startingGrid |> Maybe.withDefault (Dict.fromList generateGrid)
+            startingGrid |> Maybe.withDefault defaultGrid
     in
     ( { grid = g
       , gridTemplate = startingGrid
@@ -248,14 +248,8 @@ view model =
         , Html.div [ Html.Attributes.class "actions" ]
             [ Html.button [ Html.Events.onClick AutoSolve ] [ Html.text "Auto solve" ]
             , Html.button [ Html.Events.onClick SolveSingleStep ] [ Html.text "Step" ]
-            , Html.button [ Html.Events.onClick Reset ]
-                [ Html.text
-                    (if model.gridTemplate == Just model.grid then
-                        "Reset All"
-
-                     else
-                        "Reset"
-                    )
+            , Html.button [ Html.Events.onClick Reset, Html.Attributes.disabled (not model.solved || isDefaultGrid model.grid) ]
+                [ Html.text "Reset"
                 ]
             ]
         , Html.div [ Html.Attributes.class "attributions" ]
@@ -331,10 +325,17 @@ getPossibleValuesForCell grid pos =
         |> Set.diff validNumbersForCell
 
 
-generateGrid : List ( ( Int, Int ), Maybe Int )
-generateGrid =
+defaultGrid : Grid
+defaultGrid =
     -- 9*9 = 81, range is end inclusive
-    List.range 0 80 |> List.map (\x -> ( ( modBy 9 x, x // 9 ), Nothing ))
+    List.range 0 80
+        |> List.map (\x -> ( ( modBy 9 x, x // 9 ), Nothing ))
+        |> Dict.fromList
+
+
+isDefaultGrid : Grid -> Bool
+isDefaultGrid =
+    Dict.values >> List.all ((==) Nothing)
 
 
 keyDecoder : Decode.Decoder Msg
